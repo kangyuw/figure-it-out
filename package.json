@@ -1,20 +1,21 @@
 {
-  "name": "figure-it-out-csv-export",
-  "version": "1.1.0",
-  "private": true,
-  "description": "Difficult interview challenge: fix broken CSV export with streaming & backpressure (TypeScript)",
-  "main": "dist/server.js",
-  "scripts": {
-    "start": "node dist/server.js",
-    "build": "tsc",
-    "dev": "tsc -w",
-    "test:slow": "curl --limit-rate 10k 'http://localhost:3000/residents/export.csv?count=1000000' -o /dev/null",
-    "test:slow:small": "curl --limit-rate 10k 'http://localhost:3000/residents/export.csv?count=10000' -o /dev/null",
-    "test:small": "curl 'http://localhost:3000/residents/export.csv?count=10000' -o /dev/null",
-    "test:abort": "node -e \"console.log('Starting download; press Ctrl+C to abort...')\" && curl 'http://localhost:3000/residents/export.csv?count=1000000'"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "license": "UNLICENSED"
+	"name": "figure-it-out-csv-export",
+	"version": "1.1.0",
+	"private": true,
+	"description": "Difficult interview challenge: fix broken CSV export with streaming & backpressure (TypeScript)",
+	"main": "dist/server.js",
+	"scripts": {
+		"start": "node dist/server.js",
+		"build": "tsc",
+		"dev": "tsc -w",
+		"test:slow": "curl --limit-rate 10k 'http://localhost:3000/residents/export.csv?count=1000000' -o /dev/null",
+		"test:slow:small": "curl --limit-rate 10k 'http://localhost:3000/residents/export.csv?count=10000' -o /dev/null",
+		"test:small": "curl 'http://localhost:3000/residents/export.csv?count=10000' -o /dev/null",
+		"test:abort": "node -e \"console.log('Starting download; press Ctrl+C to abort...')\" && curl 'http://localhost:3000/residents/export.csv?count=1000000'",
+		"test:massive": "curl 'http://localhost:3000/residents/export.csv?count=5000000' -o ./massive-output.csv"
+	},
+	"engines": {
+		"node": ">=18.0.0"
+	},
+	"license": "UNLICENSED"
 }
