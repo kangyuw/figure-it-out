@@ -1,0 +1,42 @@
+import type { Resident } from "../types";
+
+export function csvEscape(value: unknown): string {
+	if (value == null) return "";
+	const s = String(value);
+	if (/[",\n]/.test(s)) {
+		return '"' + s.replace(/"/g, '""') + '"';
+	}
+	return s;
+}
+
+export function toCsvHeader(): string {
+	const cols = [
+		"id",
+		"first_name",
+		"last_name",
+		"email",
+		"phone",
+		"address",
+		"city",
+		"state",
+		"postal_code",
+		"notes",
+	];
+	return cols.join(",") + "\n";
+}
+
+export function toCsvRow(row: Resident): string {
+	const cols = [
+		row.id,
+		row.first_name,
+		row.last_name,
+		row.email,
+		row.phone,
+		row.address,
+		row.city,
+		row.state,
+		row.postal_code,
+		row.notes,
+	];
+	return cols.map(csvEscape).join(",") + "\n";
+}
