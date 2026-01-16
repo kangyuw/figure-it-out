@@ -5,7 +5,8 @@
 	"description": "Difficult interview challenge: fix broken CSV export with streaming & backpressure (TypeScript)",
 	"main": "dist/server.js",
 	"scripts": {
-		"start": "node dist/server.js",
+		"start": "node --expose-gc --max-old-space-size=64 dist/server.js",
+		"start:relaxed": "node --expose-gc --max-old-space-size=80 dist/server.js",
 		"build": "tsc",
 		"dev": "tsc -w",
 		"test:slow": "curl --limit-rate 10k 'http://localhost:3000/residents/export.csv?count=1000000' -o /dev/null",
@@ -17,5 +18,12 @@
 	"engines": {
 		"node": ">=18.0.0"
 	},
-	"license": "UNLICENSED"
+	"license": "UNLICENSED",
+	"dependencies": {
+		"tsc": "^2.0.4",
+		"typescript": "^5.9.3"
+	},
+	"devDependencies": {
+		"@types/node": "^25.0.9"
+	}
 }

@@ -51,6 +51,8 @@ export function createResidentGenerator(
   opts: { simulateLatency?: boolean } = {}
 ): any {
   const gen = residentGenerator(count, opts);
-  return stream.Readable.from(gen, { objectMode: true, highWaterMark: 64 });
+  // Very small highWaterMark to minimize buffering
+  // This is critical for memory control - larger values cause memory bloat
+  return stream.Readable.from(gen, { objectMode: true, highWaterMark: 4 });
 }
 

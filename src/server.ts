@@ -4,9 +4,14 @@
 // Using CommonJS require for Node built-ins to avoid requiring @types/node.
 const http: any = require('http');
 const url: any = require('url');
+const stream: any = require('stream');
+const { pipeline } = stream;
+const { promisify } = require('util');
+const pipelineAsync = promisify(pipeline);
 
-import { fetchAllResidents } from './db/residents';
-import { toCsvHeader, toCsvRow } from './lib/csv';
+import { createResidentGenerator } from './db/residents';
+import { createResidentCsvTransform } from './lib/csvTransform';
+import { logDetailedMemory, getDetailedMemoryInfo } from './lib/memoryDiagnostics';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
@@ -37,36 +42,63 @@ const server = http.createServer(async (req: any, res: any) => {
   const { pathname } = url.parse(req.url, true);
 
   if (pathname === '/residents/export.csv') {
-    // BROKEN IMPLEMENTATION: DO NOT KEEP
-    // This naive approach pulls all rows into memory, builds a giant string,
-    // then sends it at once. This will crash for large counts (e.g., 1M rows).
-    try {
-      const count = parseCount(req.url);
-      console.log(`Starting BROKEN export for count=${count}`);
-      logMemory('before');
+    // Streaming implementation using pipeline for robust error handling
+    const count = parseCount(req.url);
+    console.log(`Starting streaming export for count=${count}`);
+    logMemory('before');
+    logDetailedMemory('before-detail');
 
-      // Naive bulk load: huge memory spike, very slow, risks OOM
-      const rows = await fetchAllResidents(count);
-
-      // Build CSV in memory (also terrible for large outputs)
-      const header = toCsvHeader();
-      const body = rows.map(toCsvRow).join('');
-      const csv = header + body;
-
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', 'attachment; filename="residents.csv"');
-      res.setHeader('Cache-Control', 'no-store');
-      res.end(csv);
-      logMemory('after');
-      return;
-    } catch (err) {
-      console.error('BROKEN export failed:', err);
-      res.statusCode = 500;
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      res.end('Internal Server Error');
-      return;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="residents.csv"');
+    res.setHeader('Cache-Control', 'no-store');
+    
+    // CRITICAL: Reduce the response stream's internal buffer
+    // Default is 16KB which causes memory accumulation with slow clients
+    // Cork/uncork can help batch writes more efficiently
+    if (res.writableHighWaterMark !== undefined) {
+      // Note: Cannot change highWaterMark after creation, but we can work with it
+      console.log(`[Response] writableHighWaterMark=${res.writableHighWaterMark}`);
     }
+
+    // Create the stream chain with minimal buffering
+    const source = createResidentGenerator(count);
+    const transform = createResidentCsvTransform({ includeHeader: true });
+
+    // Handle client abort (Ctrl+C, network drop, etc.)
+    const cleanup = () => {
+      console.log('Client aborted, cleaning up streams');
+      source.destroy();
+      transform.destroy();
+    };
+
+    req.on('close', cleanup);
+    req.on('aborted', cleanup);
+
+    try {
+      // Use pipeline for robust error handling and automatic cleanup
+      await pipelineAsync(source, transform, res);
+      const gcCallCount = (transform as any).getGcCallCount ? (transform as any).getGcCallCount() : 0;
+      const m = process.memoryUsage();
+      const rss = Math.round(m.rss / (1024 * 1024));
+      const heapUsed = Math.round(m.heapUsed / (1024 * 1024));
+      const heapTotal = Math.round(m.heapTotal / (1024 * 1024));
+      console.log(`[after] rss=${rss}MB heapUsed=${heapUsed}MB heapTotal=${heapTotal}MB gcCalls=${gcCallCount}`);
+      logDetailedMemory('after-detail');
+      console.log('Export completed successfully');
+    } catch (err: any) {
+      // Pipeline already cleaned up streams, but log the error
+      if (err.code !== 'ECONNRESET' && err.code !== 'EPIPE') {
+        console.error('Export failed:', err);
+      }
+
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.end('Internal Server Error');
+      }
+    }
+    return;
   }
 
   return notFound(res);
@@ -78,4 +110,3 @@ server.listen(PORT, () => {
 
 // Periodic memory logging to make problems obvious during testing
 setInterval(() => logMemory('tick'), 5000).unref();
-

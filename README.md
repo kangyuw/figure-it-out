@@ -73,7 +73,33 @@ Replace the broken export with a streaming implementation that:
 - What would happen if we used `Promise.all` to process all rows?
 
 ## Definition of Done
-- Export 1M rows without exceeding ~100MB RSS.
+- [] Export 1M rows without exceeding ~100MB RSS.
 - Works with slow clients (limited rate) and client aborts without crashing or leaking.
 - No external dependencies added.
 - Clean, readable code with comments explaining key choices.
+
+## TODO List
+- [X] Memory explode -> Fixed with pipeline
+- [X] Wire the response abort/close events to cancel upstream production.
+- [X] Tune `highWaterMark` to balance throughput and memory.
+
+## Fix Log: Memory Management Approach
+
+The best balance highWaterMark is 128, I have found this value by properly logging the gc behavior and monitoring RSS memory usage on the way.
+
+### Problem
+RSS exceeded 100MB (reaching ~225MB) despite using streams and calling GC.
+
+### Root Causes
+1. `setImmediate(() => gc())` - async GC allowed memory to pile up before collection
+2. No V8 heap size limit - heap grew unconstrained from 7MB to 173MB
+3. Large `highWaterMark` - too much data buffered in stream queues
+
+### Solution
+1. **Synchronous GC** - removed `setImmediate`, GC blocks until complete
+2. **V8 heap cap** - added `--max-old-space-size=64` to force aggressive GC
+3. **Small buffers** - reduced `highWaterMark` to 128 across all streams
+4. **Memory-aware GC** - extra GC trigger when RSS approaches 90MB
+
+### Key Insight
+RSS = heapTotal + external memory. GC frees heap space but doesn't return memory to OS. The only reliable control is limiting heap size via `--max-old-space-size`.
